@@ -1,9 +1,12 @@
 const sha256 = require('sha256'); 
+const currentNodeUrl = process.argv[3];
 
 // using constructor function to build the blockchain
 function Blockchain(params) {
   this.chain = [];
   this.pendingTransactions = [];
+  this.currentNodeUrl = currentNodeUrl;
+  this.networkNodes = [];
 
   // Genesis block
   this.createNewBlock(1150, 'genesis', 'block')
@@ -59,7 +62,7 @@ Blockchain.prototype.proofOfWork = function(previousBlockHash, currentBlockDetai
     nonce++;
     hash = this.hashBlock(previousBlockHash, currentBlockDetails, nonce)
     
-    // console.log(hash);
+    console.log(hash);
   }
   return nonce;
 }

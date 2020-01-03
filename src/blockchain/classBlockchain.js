@@ -1,8 +1,13 @@
+const sha256 = require('sha256'); 
+const currentNodeUrl = process.argv[3];
+
 // Using a class to build the blockchain
 class Blockchain {
   constructor() {
     this.chain = [];
     this.newTransactions = [];
+    this.currentNodeUrl = currentNodeUrl;
+    this.networkNodes = [];
   }
 
 // create new block method

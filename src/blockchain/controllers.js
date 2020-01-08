@@ -3,109 +3,211 @@ const rp = require('request-promise');
 const Blockchain = require('./blockchain');
 
 const cryptoCoin = new Blockchain();
-const nodeAddress = uuid().split('-').join('');
+const nodeAddress = uuid()
+  .split('-')
+  .join('');
 
-  // Get the whole blockchain 
-  const getBlockchain = function (req, res) {
-    res.send(cryptoCoin)
-  }
+// GET THE WHOLE BLOCKCHAIN
+const getBlockchain = function(req, res) {
+  res.send(cryptoCoin);
+};
 
-  // Post a transaction
-  const postTransaction = function (req, res) {
-    const {amount, sender, recipient} = req.body;
-    const blockIndex = cryptoCoin.createNewTransaction(amount, sender, recipient);
-    res.status(200).json({
+// POST A NEW TRANSACTION
+const postTransaction = function(req, res) {
+  const newTransaction = req.body;
+  // Add new transaction to pending transactions array
+  const blockIndex = cryptoCoin.addToPendingTransactions(newTransaction);
+  res.status(200).json({
     status: 'Success',
-    message:`Transaction will be added in block ${blockIndex}`
-    })
-  }
+    message: `Transaction will be added in block ${blockIndex}.`
+  });
+};
 
-  // Mine a new block
-  const mineNewBlock = function (req, res) {
-    const lastBlock = cryptoCoin.getLastBlock();
-    const previousBlockHash = lastBlock['hash'];
-    const currentBlockDetails = {
-      transaction: cryptoCoin.pendingTransactions,
-      index: lastBlock['index'] + 1,
-    }
-    
-    const nonce = cryptoCoin.proofOfWork(previousBlockHash, currentBlockDetails);
-    const hash = cryptoCoin.hashBlock(previousBlockHash, currentBlockDetails, nonce);
+// BROADCAST A NEW TRANSACTION
+const broadcastTransaction = function(req, res) {
+  const { amount, sender, recipient } = req.body;
+  const newTransaction = cryptoCoin.createNewTransaction(
+    amount,
+    sender,
+    recipient
+  );
+  // add new transaction to pending transaction on this node
+  cryptoCoin.addToPendingTransactions(newTransaction);
 
-    // Send mining reward to this node's address
-    cryptoCoin.createNewTransaction(12.5, '00', nodeAddress)
+  const transactionRequestPromises = [];
+  // broadcast new transaction to other nodes on the network
+  cryptoCoin.networkNodes.forEach(networkNodeUrl => {
+    const requestOptions = {
+      uri: networkNodeUrl + '/transaction',
+      method: 'POST',
+      body: newTransaction,
+      json: true
+    };
+    transactionRequestPromises.push(rp(requestOptions));
+  });
 
-    const newBlock = cryptoCoin.createNewBlock(nonce, previousBlockHash, hash);
+  Promise.all(transactionRequestPromises).then(data => {
     res.status(200).json({
       status: 'Success',
-      message: 'Block mined successfully',
-      block: newBlock
+      message:
+        'Transaction successfully created nad broadcast to entire network'
+    });
+  });
+};
+
+// MINE A NEW BLOCK
+const mineNewBlock = function(req, res) {
+  const lastBlock = cryptoCoin.getLastBlock();
+  const previousBlockHash = lastBlock['hash'];
+  const currentBlockDetails = {
+    transaction: cryptoCoin.pendingTransactions,
+    index: lastBlock['index'] + 1
+  };
+
+  const nonce = cryptoCoin.proofOfWork(previousBlockHash, currentBlockDetails);
+  const hash = cryptoCoin.hashBlock(
+    previousBlockHash,
+    currentBlockDetails,
+    nonce
+  );
+  const newBlock = cryptoCoin.createNewBlock(nonce, previousBlockHash, hash);
+
+  const newBlockRequestPromises = [];
+  cryptoCoin.networkNodes.forEach(networkNodeUrl => {
+    const requestOptions = {
+      uri: networkNodeUrl + '/receive-new-block',
+      method: 'POST',
+      body: { newBlock: newBlock },
+      json: true
+    };
+    newBlockRequestPromises.push(rp(requestOptions));
+  });
+
+  Promise.all(newBlockRequestPromises)
+    .then(data => {
+      // Send mining reward to this node's address
+      const requestOptions = {
+        uri: cryptoCoin.currentNodeUrl + '/transaction/broadcast',
+        method: 'POST',
+        body: {
+          amount: 12.5,
+          sender: '00',
+          recipient: nodeAddress
+        },
+        json: true
+      };
+      return rp(requestOptions);
+    })
+    .then(data => {
+      res.status(200).json({
+        status: 'Success',
+        message: 'Block mined successfully',
+        block: newBlock
+      });
+    });
+};
+
+// RECEIVE NEW BLOCK
+const receiveNewBlock = function(req, res) {
+  const { newBlock } = req.body;
+  // Validate new block
+  const lastBlock = cryptoCoin.getLastBlock();
+  const correctHash = lastBlock.hash === newBlock.previousBlockHash;
+  const correctIndex = lastBlock['index'] + 1 === newBlock['index'];
+  if (correctHash && correctIndex) {
+    cryptoCoin.chain.push(newBlock);
+    cryptoCoin.pendingTransactions = [];
+    res.status(200).json({
+      status: 'Success',
+      message: 'New block received and added to blockchain successfully',
+      newBlock: newBlock
+    });
+  } else {
+    res.status(400).json({
+      status: 'Failed',
+      message: 'New block was rejected',
+      newBlock: newBlock
     });
   }
+};
 
-  //  Register and broadcast a node to the entire network
-  const registerAndBroadcastNode = function (req, res) {
-    const {newNodeUrl} = req.body;
-    if (cryptoCoin.networkNodes.indexOf(newNodeUrl) == -1)cryptoCoin.networkNodes.push(newNodeUrl);
+//  REGISTER AND BROADCAST A NODE TO THE ENTIRE NETWORK
+const registerAndBroadcastNode = function(req, res) {
+  const { newNodeUrl } = req.body;
+  if (cryptoCoin.networkNodes.indexOf(newNodeUrl) == -1)
+    cryptoCoin.networkNodes.push(newNodeUrl);
+  const registeredNodePromises = [];
+  // broadcast the node url
+  cryptoCoin.networkNodes.forEach(networkNodeUrl => {
+    // hit the /register-node endpoint
+    const requestOptions = {
+      uri: networkNodeUrl + '/register-node',
+      method: 'POST',
+      body: { newNodeUrl: newNodeUrl },
+      json: true
+    };
+    registeredNodePromises.push(rp(requestOptions));
+  });
 
-    const registeredNodePromises = [];
-
-    // broadcast the node url
-    cryptoCoin.networkNodes.forEach(networkNodeUrl => {
-      // hit the /register-node endpoint
-      const requestOptions = {
-        uri: networkNodeUrl + '/register-node',
-        method: 'POST',
-        body: {newNodeUrl: newNodeUrl},
-        json: true
-      };
-      registeredNodePromises.push(rp(requestOptions));
-    })
-
-    Promise.all(registeredNodePromises)
+  Promise.all(registeredNodePromises)
     .then(data => {
-      const bulkRegisterOption = {
+      const bulkRegisterOptions = {
         uri: newNodeUrl + '/register-nodes-bulk',
         method: 'POST',
-        body: {allNetworkNodes: [...cryptoCoin.networkNodes, cryptoCoin.currentNodeUrl]},
+        body: {
+          allNetworkNodes: [
+            ...cryptoCoin.networkNodes,
+            cryptoCoin.currentNodeUrl
+          ]
+        },
         json: true
       };
-      return rp(bulkRegisterOption);
+      return rp(bulkRegisterOptions);
     })
     .then(data => {
       res.status(200).json({
         status: 'Success',
         message: 'Node successfully registered with the network'
-      })
-    })
-  }
-
-  // Register a node with the network
-  const registerNode = function (req, res) {
-    const {newNodeUrl} = req.body;
-    const nodeAbsent = cryptoCoin.networkNodes.indexOf(newNodeUrl) == -1;
-    const notCurrentNode = cryptoCoin.currentNodeUrl !== newNodeUrl; 
-    // Register new node url with this current node
-    if (nodeAbsent && notCurrentNode) cryptoCoin.networkNodes.push(newNodeUrl);
-    res.status(200).json({
-      status: 'Success',
-      message: 'New node registered with current node successfully'
-    })
-  }
-
-  // Register multiple nodes at once
-  const registerNodeBulk = function (req, res) {
-    const {allNetworkNodes} = req.body;
-    allNetworkNodes.forEach(networkNodeUrl => {
-      const nodeAbsent = cryptoCoin.networkNodes.indexOf(networkNodeUrl) == -1;
-      const notCurrentNode = cryptoCoin.currentNodeUrl !== networkNodeUrl; 
-
-      if (nodeAbsent && notCurrentNode) cryptoCoin.networkNodes.push(networkNodeUrl);
+      });
     });
-    res.status(200).json({
-      status: 'Success',
-      message: 'Bulk node registration successful'
-    })
-  }
+};
 
-module.exports = {getBlockchain, postTransaction, mineNewBlock, registerAndBroadcastNode, registerNode, registerNodeBulk};
+// REGISTER A NODE WITH THE NETWORK
+const registerNode = function(req, res) {
+  const { newNodeUrl } = req.body;
+  const nodeAbsent = cryptoCoin.networkNodes.indexOf(newNodeUrl) == -1;
+  const notCurrentNode = cryptoCoin.currentNodeUrl !== newNodeUrl;
+  // Register new node url with this current node
+  if (nodeAbsent && notCurrentNode) cryptoCoin.networkNodes.push(newNodeUrl);
+  res.status(200).json({
+    status: 'Success',
+    message: 'New node registered with current node successfully'
+  });
+};
+
+// REGISTER MULTIPLE NODES AT ONCE
+const registerNodeBulk = function(req, res) {
+  const { allNetworkNodes } = req.body;
+  allNetworkNodes.forEach(networkNodeUrl => {
+    const nodeAbsent = cryptoCoin.networkNodes.indexOf(networkNodeUrl) == -1;
+    const notCurrentNode = cryptoCoin.currentNodeUrl !== networkNodeUrl;
+
+    if (nodeAbsent && notCurrentNode)
+      cryptoCoin.networkNodes.push(networkNodeUrl);
+  });
+  res.status(200).json({
+    status: 'Success',
+    message: 'Bulk node registration successful'
+  });
+};
+
+module.exports = {
+  getBlockchain,
+  postTransaction,
+  broadcastTransaction,
+  mineNewBlock,
+  receiveNewBlock,
+  registerAndBroadcastNode,
+  registerNode,
+  registerNodeBulk
+};

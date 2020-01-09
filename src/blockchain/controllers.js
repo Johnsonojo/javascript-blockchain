@@ -201,6 +201,7 @@ const registerNodeBulk = function(req, res) {
   });
 };
 
+// CONSENSUS ALGORITHM FOR THE BLOCKCHAIN
 const getConsensus = function(req, res) {
   const getConsensusPromises = [];
   cryptoCoin.networkNodes.forEach(networkNodeUrl => {
@@ -212,7 +213,6 @@ const getConsensus = function(req, res) {
 
     getConsensusPromises.push(rp(requestOptions));
   });
-
   Promise.all(getConsensusPromises).then(blockchains => {
     const currentChainLength = cryptoCoin.chain.length;
     let maxChainLength = currentChainLength;
@@ -248,6 +248,62 @@ const getConsensus = function(req, res) {
   });
 };
 
+// METHOD FOR GETTING A SPECIFIC BLOCK HASH
+const getBlockHash = function(req, res) {
+  const { blockHash } = req.params;
+  const blockDetails = cryptoCoin.getBlock(blockHash);
+  if (blockDetails) {
+    res.status(200).json({
+      status: 'Success',
+      message: 'Block found successfully',
+      block: blockDetails
+    });
+  } else {
+    res.status(404).json({
+      status: 'Failure',
+      message: 'Block not found',
+      block: null
+    });
+  }
+};
+
+// METHOD FOR GETTING A SPECIFIC TRANSACTION HASH
+const getTransactionId = function(req, res) {
+  const { transactionId } = req.params;
+  const transactionDetails = cryptoCoin.getTransaction(transactionId);
+  if (
+    transactionDetails.transaction !== null ||
+    transactionDetails.block !== null
+  ) {
+    res.status(200).json({
+      status: 'Success',
+      message: 'Transaction found successfully',
+      transactionDetails
+    });
+  } else if (
+    transactionDetails.transaction === null ||
+    transactionDetails.block === null
+  ) {
+    res.status(404).json({
+      status: 'Failure',
+      message: 'Transaction with requested id not found',
+      transactionDetails
+    });
+  }
+};
+
+// METHOD FOR GETTING A SPECIFIC ADDRESS DETAILS
+const getAddress = function(req, res) {
+  const { address } = req.params;
+
+  const addressDetails = cryptoCoin.getAddressData(address);
+  if (addressDetails) {
+    res.json({
+      addressDetails
+    });
+  }
+};
+
 module.exports = {
   getBlockchain,
   postTransaction,
@@ -257,5 +313,8 @@ module.exports = {
   registerAndBroadcastNode,
   registerNode,
   registerNodeBulk,
-  getConsensus
+  getConsensus,
+  getBlockHash,
+  getTransactionId,
+  getAddress
 };

@@ -9,7 +9,10 @@ const {
   registerAndBroadcastNode,
   registerNode,
   registerNodeBulk,
-  getConsensus
+  getConsensus,
+  getBlockHash,
+  getTransactionId,
+  getAddress
 } = require('./blockchain/controllers');
 
 const app = express();
@@ -39,6 +42,12 @@ app.post('/register-node', registerNode);
 app.post('/register-nodes-bulk', registerNodeBulk);
 
 app.get('/consensus', getConsensus);
+
+app.get('/block/:blockHash', getBlockHash);
+
+app.get('/transaction/:transactionId', getTransactionId);
+
+app.get('/address/:address', getAddress);
 
 app.listen(port, () =>
   console.log(`Javascript Blockchain is listening on port ${port}`)

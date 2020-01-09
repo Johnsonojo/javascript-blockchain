@@ -87,4 +87,49 @@ Blockchain.prototype.proofOfWork = function(
   return nonce;
 };
 
+// Chain is valid method fro the consensus algorithm
+Blockchain.prototype.chainIsValid = function(blockchain) {
+  let validChain = true;
+
+  for (let i = 1; i < blockchain.length; i++) {
+    const currentBlock = blockchain[i];
+    const previousBlock = blockchain[i - 1];
+    const currentBlockDetails = {
+      transactions: currentBlock['transactions'],
+      index: currentBlock['index']
+    };
+    // validate every block in the chain to see if they have the correct data
+    const blockHash = this.hashBlock(
+      previousBlock['hash'],
+      currentBlockDetails,
+      currentBlock['nonce']
+    );
+    if (blockHash.substring(0, 4) !== '0000') {
+      validChain = false;
+    }
+    if (currentBlock['previousBlockHash'] !== previousBlock['hash']) {
+      validChain = false;
+    }
+  }
+
+  // check the genesis block properties
+  const genesisBlock = blockchain[0];
+  const correctNonce = genesisBlock['nonce'] === 1150;
+  const correctPreviousBlockHash =
+    genesisBlock['previousBlockHash'] === 'genesis';
+  const correctHash = genesisBlock['hash'] === 'block';
+  const correctTransactions = genesisBlock['transactions'].length === 0;
+
+  if (
+    !correctNonce ||
+    !correctPreviousBlockHash ||
+    !correctHash ||
+    !correctTransactions
+  ) {
+    validChain = false;
+  }
+
+  return validChain;
+};
+
 module.exports = Blockchain;

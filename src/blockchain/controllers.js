@@ -60,7 +60,7 @@ const mineNewBlock = function(req, res) {
   const lastBlock = cryptoCoin.getLastBlock();
   const previousBlockHash = lastBlock['hash'];
   const currentBlockDetails = {
-    transaction: cryptoCoin.pendingTransactions,
+    transactions: cryptoCoin.pendingTransactions,
     index: lastBlock['index'] + 1
   };
 
@@ -201,6 +201,53 @@ const registerNodeBulk = function(req, res) {
   });
 };
 
+const getConsensus = function(req, res) {
+  const getConsensusPromises = [];
+  cryptoCoin.networkNodes.forEach(networkNodeUrl => {
+    const requestOptions = {
+      uri: networkNodeUrl + '/blockchain',
+      method: 'GET',
+      json: true
+    };
+
+    getConsensusPromises.push(rp(requestOptions));
+  });
+
+  Promise.all(getConsensusPromises).then(blockchains => {
+    const currentChainLength = cryptoCoin.chain.length;
+    let maxChainLength = currentChainLength;
+    let newLongestChain = null;
+    let newPendingTransactions = null;
+
+    blockchains.forEach(blockchain => {
+      if (blockchain.chain.length > maxChainLength) {
+        maxChainLength = blockchain.chain.length;
+        newLongestChain = blockchain.chain;
+        newPendingTransactions = blockchain.pendingTransactions;
+      }
+    });
+
+    if (
+      !newLongestChain ||
+      (newLongestChain && !cryptoCoin.chainIsValid(newLongestChain))
+    ) {
+      res.status(200).json({
+        status: 'Success',
+        message: 'Current chain has not been replaced',
+        chain: cryptoCoin.chain
+      });
+    } else {
+      cryptoCoin.chain = newLongestChain;
+      cryptoCoin.pendingTransactions = newPendingTransactions;
+      res.status(200).json({
+        status: 'Success',
+        message: 'This chain has been replaced by longest chain',
+        chain: cryptoCoin.chain
+      });
+    }
+  });
+};
+
 module.exports = {
   getBlockchain,
   postTransaction,
@@ -209,5 +256,6 @@ module.exports = {
   receiveNewBlock,
   registerAndBroadcastNode,
   registerNode,
-  registerNodeBulk
+  registerNodeBulk,
+  getConsensus
 };

@@ -2,7 +2,7 @@ const sha256 = require('sha256');
 const uuid = require('uuid/v1');
 const currentNodeUrl = process.argv[3];
 
-// using constructor function to build the blockchain
+// USING CONSTRUCTOR FUNCTION TO BUILD THE BLOCKCHAIN
 function Blockchain(params) {
   this.chain = [];
   this.pendingTransactions = [];
@@ -13,7 +13,7 @@ function Blockchain(params) {
   this.createNewBlock(1150, 'genesis', 'block');
 }
 
-// create new block method
+// CREATE NEW BLOCK METHOD
 Blockchain.prototype.createNewBlock = function(nonce, previousBlockHash, hash) {
   const newBlock = {
     index: this.chain.length + 1,
@@ -30,12 +30,12 @@ Blockchain.prototype.createNewBlock = function(nonce, previousBlockHash, hash) {
   return newBlock;
 };
 
-// Get last block
+// GET LAST BLOCK METHOD
 Blockchain.prototype.getLastBlock = function() {
   return this.chain[this.chain.length - 1];
 };
 
-// Creat new transaction
+// CREATE NEW TRANSACTION
 Blockchain.prototype.createNewTransaction = function(
   amount,
   sender,
@@ -52,13 +52,13 @@ Blockchain.prototype.createNewTransaction = function(
   return newTransaction;
 };
 
-// Add new transaction to pending transactions
+// ADD NEW TRANSACTIONS TO PENDING TRANSACTION
 Blockchain.prototype.addToPendingTransactions = function(transaction) {
   this.pendingTransactions.push(transaction);
   return this.getLastBlock()['index'] + 1;
 };
 
-// hash a block
+// HASH A BLOCK
 Blockchain.prototype.hashBlock = function(
   previousBlockHash,
   currentBlockDetails,
@@ -71,7 +71,7 @@ Blockchain.prototype.hashBlock = function(
   return hash;
 };
 
-// Proof of Work Algorithm
+// PROOF OF WORK ALGORITHM
 Blockchain.prototype.proofOfWork = function(
   previousBlockHash,
   currentBlockDetails
@@ -87,7 +87,7 @@ Blockchain.prototype.proofOfWork = function(
   return nonce;
 };
 
-// Chain is valid method fro the consensus algorithm
+// CHAIN IS VALID METHOD FOR THE CONSENSUS ALGORITHM
 Blockchain.prototype.chainIsValid = function(blockchain) {
   let validChain = true;
 
@@ -112,7 +112,7 @@ Blockchain.prototype.chainIsValid = function(blockchain) {
     }
   }
 
-  // check the genesis block properties
+  // Validate the genesis block properties
   const genesisBlock = blockchain[0];
   const correctNonce = genesisBlock['nonce'] === 1150;
   const correctPreviousBlockHash =
@@ -130,6 +130,55 @@ Blockchain.prototype.chainIsValid = function(blockchain) {
   }
 
   return validChain;
+};
+
+// GET A SPECIFIC BLOCK ON THE BLOCKCHAIN
+Blockchain.prototype.getBlock = function(blockHash) {
+  let correctBlock = null;
+  this.chain.forEach(block => {
+    if (block.hash === blockHash) correctBlock = block;
+  });
+  return correctBlock;
+};
+
+// GET A SPECIFIC TRANSACTION FROM THE BLOCKCHAIN
+Blockchain.prototype.getTransaction = function(transactionId) {
+  let correctTransaction = null;
+  let correctBlock = null;
+  this.chain.forEach(block => {
+    block.transactions.forEach(transaction => {
+      if (transaction.transactionId === transactionId) {
+        correctTransaction = transaction;
+        correctBlock = block;
+      }
+    });
+  });
+  return { transaction: correctTransaction, block: correctBlock };
+};
+
+// GET A SPECIFIC ADDRESS FROM THE BLOCKCHAIN
+Blockchain.prototype.getAddressData = function(address) {
+  const addressTransactions = [];
+  this.chain.forEach(block => {
+    block.transactions.forEach(transaction => {
+      if (transaction.sender === address || transaction.recipient === address) {
+        addressTransactions.push(transaction);
+      }
+    });
+  });
+
+  let balance = 0;
+  addressTransactions.forEach(transaction => {
+    if (transaction.recipient === address) {
+      balance += transaction.amount;
+    } else if (transaction.sender === address) {
+      balance -= transaction.amount;
+    }
+  });
+  return {
+    transactions: addressTransactions,
+    addressBalance: balance
+  };
 };
 
 module.exports = Blockchain;
